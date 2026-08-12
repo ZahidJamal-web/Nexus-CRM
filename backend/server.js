@@ -4,6 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 
 import { connectDB } from "./config/db.js";
+
 import { notFound, errorHandler } from "./middleware/error.middleware.js";
 
 import authRoutes from "./routes/auth.routes.js";
@@ -16,50 +17,100 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 
 const app = express();
 
-/* ────────────────────────────────── Middleware ────────────────────────────────── */
+/* ──────────────────────────────────
+   Middleware
+────────────────────────────────── */
+
 app.use(
-    cors({
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
-        credentials: true,
-    })
+  cors({
+    origin:
+      process.env.CLIENT_URL ||
+      "http://localhost:5173",
+    credentials: true,
+  })
 );
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
-if (process.env.NODE_ENV !== "production") app.use(morgan("dev"));
 
-/* ──────────────────────────────────── Routes ──────────────────────────────────── */
-app.get("/api/health", (req, res) =>
-    res.json({ success: true, status: "ok", service: "Nexus CRM API" })
-);
+if (process.env.NODE_ENV !== "production") {
+  app.use(morgan("dev"));
+}
 
-app.use("/api/auth",authRoutes);
-app.use("/api/leads",leadRoutes);
-app.use("/api/contacts",contactRoutes);
-app.use("/api/notes",noteRoutes);
-app.use("/api/tasks",taskRoutes);
-app.use("/api/ai",aiRoutes); 
-app.use("/api/analytics",analyticsRoutes);
+/* ──────────────────────────────────
+   Database
+────────────────────────────────── */
 
-/* ────────────────────────────── Error handling (last) ───────────────────────────── */
+let dbConnected = false;
+
+const ensureDB = async () => {
+  if (!dbConnected) {
+    await connectDB();
+    dbConnected = true;
+  }
+};
+
+/* ──────────────────────────────────
+   Health
+────────────────────────────────── */
+
+app.get("/api/health", async (req, res) => {
+  try {
+    await ensureDB();
+
+    res.json({
+      success: true,
+      status: "ok",
+      service: "Nexus CRM API",
+      database: "connected",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: "error",
+      message: "Database connection failed",
+    });
+  }
+});
+
+/* ──────────────────────────────────
+   Routes
+────────────────────────────────── */
+
+app.use("/api/auth", authRoutes);
+app.use("/api/leads", leadRoutes);
+app.use("/api/contacts", contactRoutes);
+app.use("/api/notes", noteRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/analytics", analyticsRoutes);
+
+/* ──────────────────────────────────
+   Error handling
+────────────────────────────────── */
+
 app.use(notFound);
 app.use(errorHandler);
 
-/* ──────────────────────────────────── Boot ──────────────────────────────────── */
-const PORT = process.env.PORT || 8000;
+/* ──────────────────────────────────
+   Local development
+────────────────────────────────── */
 
-const start = async () => {
-    try {
-        await connectDB();
-        app.listen(PORT, () =>
-            console.log(`🚀 Nexus CRM API running on http://localhost:${PORT}`)
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 8000;
+
+  ensureDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(
+          `🚀 Nexus CRM API running on http://localhost:${PORT}`
         );
-    } catch (err) {
-        console.error(err.stack);  
-        process.exit(1);
-    }
-};
-
-start();
+      });
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
 
 export default app;
