@@ -122,8 +122,7 @@ app.use(async (req, res, next) => {
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    service: "Nexus CRM API",
-    status: "running",
+    message: "Nexus CRM API is running",
   });
 });
 
