@@ -32,6 +32,14 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Nexus CRM Backend is running",
+  });
+});
+
 app.use(
   cors({
     origin: (origin, callback) => {
