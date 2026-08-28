@@ -33,7 +33,7 @@ export function AuthShell({ children }) {
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
-                  <Icon className="h-[18px] w-[18px]" />
+                  <Icon className="h-4.5 w-4.5" />
                 </div>
                 <span className="text-sm text-white/90">{text}</span>
               </div>

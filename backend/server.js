@@ -28,17 +28,9 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://nexuscrm-backend.vercel.app/",
+  "https://nexuscrm-backend.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
-
-
-app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Nexus CRM Backend is running",
-  });
-});
 
 app.use(
   cors({
