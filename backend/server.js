@@ -1,11 +1,15 @@
 import "dotenv/config";
+
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 
 import { connectDB } from "./config/db.js";
 
-import { notFound, errorHandler } from "./middleware/error.middleware.js";
+import {
+  notFound,
+  errorHandler,
+} from "./middleware/error.middleware.js";
 
 import authRoutes from "./routes/auth.routes.js";
 import leadRoutes from "./routes/lead.routes.js";
@@ -18,21 +22,50 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 const app = express();
 
 /* ──────────────────────────────────
-   Middleware
+   CORS
 ────────────────────────────────── */
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://nexuscrm-backend.vercel.app/",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 app.use(
   cors({
-    origin:
-      "https://ai-crm-dashboard.vercel.app" ||
-      "http://localhost:5173",
-      
+    origin: (origin, callback) => {
+      // Allow requests with no origin
+      // (Postman, server-to-server, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("CORS blocked:", origin);
+
+      return callback(
+        new Error("Not allowed by CORS")
+      );
+    },
     credentials: true,
   })
 );
 
+/* ──────────────────────────────────
+   Middleware
+────────────────────────────────── */
+
 app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
 
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
@@ -48,8 +81,43 @@ const ensureDB = async () => {
   if (!dbConnected) {
     await connectDB();
     dbConnected = true;
+
+    console.log("✅ Database connected");
   }
 };
+
+/* ──────────────────────────────────
+   Database Middleware
+────────────────────────────────── */
+
+// Make sure the database is connected
+// before handling API requests.
+
+app.use(async (req, res, next) => {
+  try {
+    await ensureDB();
+    next();
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+    });
+  }
+});
+
+/* ──────────────────────────────────
+   Root
+────────────────────────────────── */
+
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    service: "Nexus CRM API",
+    status: "running",
+  });
+});
 
 /* ──────────────────────────────────
    Health
@@ -66,6 +134,8 @@ app.get("/api/health", async (req, res) => {
       database: "connected",
     });
   } catch (error) {
+    console.error("Health check failed:", error);
+
     res.status(500).json({
       success: false,
       status: "error",
@@ -79,22 +149,29 @@ app.get("/api/health", async (req, res) => {
 ────────────────────────────────── */
 
 app.use("/api/auth", authRoutes);
+
 app.use("/api/leads", leadRoutes);
+
 app.use("/api/contacts", contactRoutes);
+
 app.use("/api/notes", noteRoutes);
+
 app.use("/api/tasks", taskRoutes);
+
 app.use("/api/ai", aiRoutes);
+
 app.use("/api/analytics", analyticsRoutes);
 
 /* ──────────────────────────────────
-   Error handling
+   Error Handling
 ────────────────────────────────── */
 
 app.use(notFound);
+
 app.use(errorHandler);
 
 /* ──────────────────────────────────
-   Local development
+   Local Development
 ────────────────────────────────── */
 
 if (process.env.NODE_ENV !== "production") {
@@ -109,9 +186,17 @@ if (process.env.NODE_ENV !== "production") {
       });
     })
     .catch((err) => {
-      console.error(err);
+      console.error(
+        "Database connection failed:",
+        err
+      );
+
       process.exit(1);
     });
 }
+
+/* ──────────────────────────────────
+   Vercel
+────────────────────────────────── */
 
 export default app;
