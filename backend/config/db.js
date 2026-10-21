@@ -1,40 +1,47 @@
-import mongoose from "mongoose";
-import dns from "dns";
 
-dns.setServers([
-    "1.1.1.1",
-    "8.8.8.8",
-]);
+import mongoose from "mongoose";
+
 mongoose.set("strictQuery", true);
 
+let connectionPromise = null;
+
 export const connectDB = async () => {
-  try {
-    // Reuse existing connection
-    if (mongoose.connection.readyState === 1) {
-      return mongoose.connection;
-    }
+  const uri = process.env.MONGODB_URI;
 
-    const uri = process.env.MONGODB_URI;
-
-    if (!uri) {
-      throw new Error(
-        "MONGO_UR is not defined in environment variables"
-      );
-    }
-
-    const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 10000,
-    });
-
-    console.log(
-      `MongoDB connected: ${conn.connection.host}/${conn.connection.name}`
+  if (!uri) {
+    throw new Error(
+      "MONGODB_URI is missing from the environment variables"
     );
-
-    return conn;
-  } catch (error) {
-    console.error("MongoDB connection failed:", error.message);
-
-    // Do NOT use process.exit() on Vercel
-    throw error;
   }
+
+  // Reuse an established connection.
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  // Reuse a connection attempt already in progress.
+  if (!connectionPromise) {
+    connectionPromise = mongoose
+      .connect(uri, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+      })
+      .then((connection) => {
+        console.log(
+          `MongoDB connected: ${connection.connection.host}/${connection.connection.name}`
+        );
+
+        return connection;
+      })
+      .catch((error) => {
+        connectionPromise = null;
+        console.error(
+          "MongoDB connection failed:",
+          error.message
+        );
+        throw error;
+      });
+  }
+
+  return connectionPromise;
 };
