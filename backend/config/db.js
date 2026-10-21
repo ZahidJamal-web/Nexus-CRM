@@ -14,7 +14,7 @@ export const connectDB = async () => {
       return mongoose.connection;
     }
 
-    const uri = process.env.MONGO_URI;
+    const uri = process.env.MONGODB_URI;
 
     if (!uri) {
       throw new Error(
