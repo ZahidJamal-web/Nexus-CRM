@@ -35,10 +35,25 @@ export const connectDB = async () => {
       })
       .catch((error) => {
         connectionPromise = null;
+
+        console.error("MongoDB connection failed:", error.message);
         console.error(
-          "MongoDB connection failed:",
-          error.message
+          "MongoDB server details:",
+          JSON.stringify(
+            error.reason?.servers
+              ? Array.from(error.reason.servers.entries()).map(
+                  ([address, server]) => ({
+                    address,
+                    type: server.type,
+                    error: server.error?.message || null,
+                  })
+                )
+              : [],
+            null,
+            2
+          )
         );
+
         throw error;
       });
   }
