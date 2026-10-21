@@ -14,11 +14,11 @@ export const connectDB = async () => {
       return mongoose.connection;
     }
 
-    const uri = process.env.MONGO_URL;
+    const uri = process.env.MONGO_URI;
 
     if (!uri) {
       throw new Error(
-        "MONGO_URL is not defined in environment variables"
+        "MONGO_UR is not defined in environment variables"
       );
     }
 
