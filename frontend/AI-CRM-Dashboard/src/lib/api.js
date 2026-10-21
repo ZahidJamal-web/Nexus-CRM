@@ -1,29 +1,45 @@
+
 import axios from "axios";
 
 export const TOKEN_KEY = "nexus_crm_token";
 
+const baseURL =
+  import.meta.env.VITE_API_URL ||
+  "https://nexuscrm-backend.vercel.app/api";
 
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-
-const api = axios.create({ baseURL });
+const api = axios.create({
+  baseURL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
 // Attach the JWT to every request if we have one.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
   return config;
 });
 
-// Normalise responses & errors so callers get clean data / messages.
+// Normalize responses and errors.
 api.interceptors.response.use(
   (res) => res.data,
   (error) => {
     const status = error.response?.status;
     const message =
-      error.response?.data?.message || error.message || "Something went wrong";
+      error.response?.data?.message ||
+      error.message ||
+      "Something went wrong";
 
-    // Auto-logout on an expired/invalid token (but not on the login screen).
-    if (status === 401 && !window.location.pathname.startsWith("/login")) {
+    // Auto-logout on an expired/invalid token.
+    if (
+      status === 401 &&
+      !window.location.pathname.startsWith("/login")
+    ) {
       localStorage.removeItem(TOKEN_KEY);
     }
 
