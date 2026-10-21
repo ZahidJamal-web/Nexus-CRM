@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 
 import express from "express";
@@ -21,43 +22,55 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 
 const app = express();
 
-/* ──────────────────────────────────
-   CORS
-────────────────────────────────── */
+/* ----------------------------------
+   CORS CONFIGURATION
+---------------------------------- */
 
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://nexuscrm-backend.vercel.app",
+  "https://nexuscrm-workspace.vercel.app/",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin
-      // (Postman, server-to-server, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests without an Origin header, such as
+    // server-to-server requests and certain API clients.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    console.warn("CORS blocked origin:", origin);
 
-      console.log("CORS blocked:", origin);
+    return callback(new Error("Origin not allowed by CORS"));
+  },
+  credentials: true,
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+  ],
+  optionsSuccessStatus: 204,
+};
 
-      return callback(
-        new Error("Not allowed by CORS")
-      );
-    },
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
 
-/* ──────────────────────────────────
-   Middleware
-────────────────────────────────── */
+// Explicitly handle browser preflight requests.
+app.options(/.*/, cors(corsOptions));
+
+/* ----------------------------------
+   GENERAL MIDDLEWARE
+---------------------------------- */
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -71,62 +84,44 @@ if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 }
 
-/* ──────────────────────────────────
-   Database
-────────────────────────────────── */
+/* ----------------------------------
+   DATABASE CONNECTION
+---------------------------------- */
 
-let dbConnected = false;
+// Cache the connection promise so simultaneous requests
+// do not create duplicate connection attempts.
+let dbConnectionPromise;
 
 const ensureDB = async () => {
-  if (!dbConnected) {
-    await connectDB();
-    dbConnected = true;
-
-    console.log("✅ Database connected");
-  }
-};
-
-/* ──────────────────────────────────
-   Database Middleware
-────────────────────────────────── */
-
-// Make sure the database is connected
-// before handling API requests.
-
-app.use(async (req, res, next) => {
-  try {
-    await ensureDB();
-    next();
-  } catch (error) {
-    console.error("❌ Database connection failed:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Database connection failed",
+  if (!dbConnectionPromise) {
+    dbConnectionPromise = connectDB().catch((error) => {
+      dbConnectionPromise = null;
+      throw error;
     });
   }
-});
 
-/* ──────────────────────────────────
-   Root
-────────────────────────────────── */
+  await dbConnectionPromise;
+};
 
+/* ----------------------------------
+   ROOT AND HEALTH ROUTES
+---------------------------------- */
+
+// This endpoint can confirm that the deployment is reachable
+// without requiring MongoDB to be available.
 app.get("/", (req, res) => {
-  res.json({
+  res.status(200).json({
     success: true,
     message: "Nexus CRM API is running",
   });
 });
 
-/* ──────────────────────────────────
-   Health
-────────────────────────────────── */
-
+// This endpoint checks the database connection too.
 app.get("/api/health", async (req, res) => {
   try {
     await ensureDB();
 
-    res.json({
+    res.status(200).json({
       success: true,
       status: "ok",
       service: "Nexus CRM API",
@@ -143,59 +138,58 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-/* ──────────────────────────────────
-   Routes
-────────────────────────────────── */
+/* ----------------------------------
+   DATABASE MIDDLEWARE
+---------------------------------- */
+
+// Ensure the database is ready before processing API routes.
+app.use("/api", async (req, res, next) => {
+  try {
+    await ensureDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+    });
+  }
+});
+
+/* ----------------------------------
+   API ROUTES
+---------------------------------- */
 
 app.use("/api/auth", authRoutes);
-
 app.use("/api/leads", leadRoutes);
-
 app.use("/api/contacts", contactRoutes);
-
 app.use("/api/notes", noteRoutes);
-
 app.use("/api/tasks", taskRoutes);
-
 app.use("/api/ai", aiRoutes);
-
 app.use("/api/analytics", analyticsRoutes);
 
-/* ──────────────────────────────────
-   Error Handling
-────────────────────────────────── */
+/* ----------------------------------
+   ERROR HANDLING
+---------------------------------- */
 
 app.use(notFound);
-
 app.use(errorHandler);
 
-/* ──────────────────────────────────
-   Local Development
-────────────────────────────────── */
+/* ----------------------------------
+   LOCAL DEVELOPMENT
+---------------------------------- */
 
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 8000;
 
-  ensureDB()
-    .then(() => {
-      app.listen(PORT, () => {
-        console.log(
-          `🚀 Nexus CRM API running on http://localhost:${PORT}`
-        );
-      });
-    })
-    .catch((err) => {
-      console.error(
-        "Database connection failed:",
-        err
-      );
-
-      process.exit(1);
-    });
+  app.listen(PORT, () => {
+    console.log(`Nexus CRM API running at http://localhost:${PORT}`);
+  });
 }
 
-/* ──────────────────────────────────
-   Vercel
-────────────────────────────────── */
+/* ----------------------------------
+   VERCEL EXPORT
+---------------------------------- */
 
 export default app;
