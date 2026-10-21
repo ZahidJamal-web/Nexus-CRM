@@ -116,6 +116,14 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get("/api/route-test", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Express route matching works",
+    path: req.path,
+  });
+});
+
 // This endpoint checks the database connection too.
 app.get("/api/health", async (req, res) => {
   try {
